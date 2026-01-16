@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@upstash/vector": "^1.2.2"
+  }
+}
