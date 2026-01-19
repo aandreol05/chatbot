@@ -1,0 +1,406 @@
+================================================================================
+            DOCUMENTATION DU PROJET - PORTFOLIO INTERACTIF RAG
+================================================================================
+
+Date de création : Janvier 2026
+Auteur : Andrea Andreoli
+Contexte : BUT Sciences des Données - Niort
+
+================================================================================
+1. PRINCIPE GÉNÉRAL DU PROJET
+================================================================================
+
+Ce projet est un **portfolio professionnel interactif** basé sur un agent IA
+utilisant la technique RAG (Retrieval Augmented Generation).
+
+OBJECTIF :
+  Permettre aux visiteurs de poser des questions en langage naturel sur le 
+  profil professionnel (compétences, expériences, projets) et obtenir des 
+  réponses précises générées par une IA.
+
+FONCTIONNEMENT GLOBAL :
+  1. Les informations du profil sont stockées dans des fichiers Markdown (data/)
+  2. Ces fichiers sont découpés en morceaux (chunks) et indexés dans une base
+     de données vectorielle (Upstash Vector)
+  3. Quand un utilisateur pose une question :
+     - L'IA recherche les morceaux de texte pertinents dans la base vectorielle
+     - Elle utilise ces informations pour générer une réponse naturelle
+     - La réponse est affichée dans une interface Streamlit
+
+TECHNOLOGIES UTILISÉES :
+  - Python 3.12/3.13
+  - Streamlit : Interface web conversationnelle
+  - OpenAI Agents : Framework pour créer des agents IA
+  - Upstash Vector : Base de données vectorielle (embeddings + recherche hybride)
+  - GPT-4.1-nano : Modèle de langage pour générer les réponses
+  - python-dotenv : Gestion des variables d'environnement
+
+
+================================================================================
+2. STRUCTURE DU PROJET
+================================================================================
+
+projet-iut-potfolio-main/
+│
+├── app.py                    # Application Streamlit (interface utilisateur)
+├── requirements.txt          # Dépendances Python
+├── package.json              # Configuration npm (si applicable)
+├── README.md                 # Instructions de mise en place
+├── .env                      # Variables d'environnement (secrets)
+│
+├── data/                     # Données du profil (sources de connaissances)
+│   ├── profil.md
+│   ├── competences.md
+│   ├── experiences.md
+│   └── projets.md
+│
+├── scripts/                  # Scripts de traitement
+│   ├── index_upstash.py      # Indexation des données dans Upstash
+│   └── agent_rag.py          # Définition de l'agent IA avec RAG
+│
+├── tests/                    # Tests unitaires
+│   ├── test_openai_agent.py
+│   └── test_upstash_vector.py
+│
+└── assets/                   # Ressources (images, etc.)
+
+
+================================================================================
+3. FICHIERS DATA/ - CONTENU DU PORTFOLIO
+================================================================================
+
+Le dossier data/ contient les informations du profil professionnel au format
+Markdown. Ces fichiers constituent la "base de connaissances" de l'agent.
+
+FICHIERS :
+
+  📄 profil.md
+     - Nom complet (Andrea Andreoli)
+     - Formation (BUT Sciences des Données - Niort)
+     - Présentation personnelle
+     - Centres d'intérêt académiques
+     - Objectifs professionnels
+     - Valeurs et qualités
+
+  📄 competences.md
+     - Compétences informatiques et data (analyse, stats, programmation)
+     - Outils maîtrisés (bureautique, environnements numériques)
+     - Compétences transversales (rigueur, organisation, travail en équipe)
+
+  📄 experiences.md
+     - Expériences professionnelles (alternance à la MAAF)
+     - Mission principale : Création de fichiers clients avec SQL/SAS pour 
+       campagnes marketing
+     - Mission secondaire : Développement d'applications VBA
+     - Stages
+     - Projets universitaires
+
+  📄 projets.md
+     - Liste des projets académiques réalisés
+     - Projet 1 : Ce chatbot (portfolio interactif)
+     - Détails : objectifs, outils utilisés, résultats
+
+STRUCTURE MARKDOWN :
+  - Les fichiers utilisent des titres (# ## ###) pour organiser le contenu
+  - Cette structure facilite le découpage en sections cohérentes lors de
+    l'indexation
+  - Chaque section est indexée séparément pour améliorer la précision des
+    recherches
+
+MODIFICATION DES DONNÉES :
+  Pour mettre à jour le portfolio :
+  1. Modifier les fichiers .md dans data/
+  2. Relancer le script d'indexation : python scripts/index_upstash.py
+  3. L'agent utilisera automatiquement les nouvelles informations
+
+
+================================================================================
+4. SCRIPT : scripts/index_upstash.py
+================================================================================
+
+RÔLE :
+  Ce script lit les fichiers Markdown du dossier data/, les découpe en 
+  morceaux (chunking), et les envoie dans la base de données vectorielle 
+  Upstash pour permettre la recherche sémantique.
+
+FONCTIONNEMENT DÉTAILLÉ :
+
+  1. CONFIGURATION
+     - Charge les variables d'environnement (.env) pour accéder à Upstash
+     - Définit CHUNK_SIZE (taille des morceaux, par défaut 200 caractères)
+     - Initialise la connexion à l'index Upstash via Index.from_env()
+
+  2. FONCTION split_by_heading(text)
+     - Découpe le contenu Markdown par sections (lignes commençant par #)
+     - Chaque titre (# ## ###) crée une nouvelle section
+     - Objectif : préserver la cohérence sémantique des informations
+
+  3. FONCTION chunk_text(text)
+     - Découpe d'abord par sections (via split_by_heading)
+     - Puis découpe chaque section en blocs de CHUNK_SIZE caractères
+     - Découpage sans chevauchement (overlap)
+     - Retourne une liste de morceaux de texte
+
+  4. BOUCLE D'INDEXATION
+     - Parcourt tous les fichiers .md dans data/
+     - Pour chaque fichier :
+       a) Lit le contenu
+       b) Découpe en chunks
+       c) Crée un objet Vector pour chaque chunk avec :
+          - id : nom du fichier + numéro du vecteur
+          - data : le texte du chunk (Upstash génère automatiquement l'embedding)
+          - metadata : source (chemin du fichier) et numéro du chunk
+
+  5. UPSERT DANS UPSTASH
+     - Envoie tous les vecteurs à Upstash via index.upsert()
+     - Upstash génère automatiquement les embeddings vectoriels
+     - Affiche le nombre de chunks indexés
+
+QUAND L'EXÉCUTER :
+  - Au premier lancement du projet (pour créer l'index)
+  - Après chaque modification des fichiers dans data/
+  - Commande : python scripts/index_upstash.py
+
+CONFIGURATION :
+  - Nécessite UPSTASH_VECTOR_REST_URL et UPSTASH_VECTOR_REST_TOKEN dans .env
+  - CHUNK_SIZE peut être ajusté (trop petit = trop de détails, trop grand = 
+    perte de précision)
+
+
+================================================================================
+5. SCRIPT : scripts/agent_rag.py
+================================================================================
+
+RÔLE :
+  Ce script définit l'agent IA qui répond aux questions des utilisateurs
+  en utilisant la recherche vectorielle (RAG).
+
+FONCTIONNEMENT DÉTAILLÉ :
+
+  1. INITIALISATION
+     - Charge les variables d'environnement
+     - Initialise la connexion à l'index Upstash Vector
+
+  2. OUTIL : search_index(query)
+     - C'est un "function tool" que l'agent peut appeler
+     - Prend une requête en entrée (mot-clé ou phrase de la question)
+     - Effectue une recherche vectorielle dans Upstash :
+       * Recherche les 5 chunks les plus similaires (top_k=5)
+       * Utilise include_metadata et include_data pour récupérer le contenu
+     - Retourne les textes des chunks trouvés, concaténés avec double saut de
+       ligne (\n\n)
+     
+     FONCTIONNEMENT DE LA RECHERCHE :
+       - L'agent convertit la query en embedding vectoriel
+       - Upstash compare ce vecteur avec tous les vecteurs stockés
+       - Retourne les 5 morceaux de texte les plus similaires sémantiquement
+
+  3. DÉFINITION DE L'AGENT
+     - Nom : "Andrea agent"
+     - Modèle : gpt-4.1-nano (modèle OpenAI)
+     - Outils : [search_index] - l'agent peut utiliser cet outil
+     - Instructions : 
+       * Se présente comme Andrea
+       * Objectif : répondre aux questions sur le profil professionnel
+       * Consignes : être concis, donner toutes les infos trouvées, les 
+         ordonner par pertinence
+       * Peut utiliser search_index pour trouver des informations
+       * Ne doit JAMAIS inventer d'informations
+       * Si pas de réponse trouvée, dire "je ne sais pas"
+
+  4. TEST
+     - Le script contient un test à la fin : pose la question "quels sont tes 
+       projets ?"
+     - Utile pour vérifier que tout fonctionne
+
+LOGIQUE RAG (Retrieval Augmented Generation) :
+  1. L'utilisateur pose une question
+  2. L'agent analyse la question et décide d'utiliser search_index
+  3. search_index recherche les informations pertinentes dans Upstash
+  4. L'agent reçoit ces informations comme contexte
+  5. L'agent génère une réponse naturelle basée sur ce contexte
+  6. L'agent NE peut PAS inventer : il se base uniquement sur les infos trouvées
+
+AVANTAGES DU RAG :
+  - Réponses basées sur des faits réels (contenu de data/)
+  - Pas d'hallucinations : l'IA ne peut inventer d'informations
+  - Facile à mettre à jour : il suffit de modifier data/ et réindexer
+
+
+================================================================================
+6. FICHIER : app.py - INTERFACE UTILISATEUR
+================================================================================
+
+RÔLE :
+  Application Streamlit qui fournit l'interface web conversationnelle pour
+  interagir avec l'agent.
+
+FONCTIONNEMENT DÉTAILLÉ :
+
+  1. IMPORTS ET CONFIGURATION
+     - Importe Streamlit pour l'interface
+     - Importe Runner pour exécuter l'agent
+     - Charge les variables d'environnement (.env)
+     - Importe l'agent depuis scripts/agent_rag.py
+
+  2. CONFIGURATION STREAMLIT (st.set_page_config)
+     - Titre de la page : "Andrea Agent"
+     - Icône : 🤖
+     - Layout : centré
+     - Sidebar : repliée par défaut
+
+  3. INTERFACE
+     - Titre : "💼 Mon Profil Professionnel"
+     - Message d'accueil : invite à poser des questions
+
+  4. GESTION DE L'HISTORIQUE (st.session_state)
+     - Crée une liste "messages" dans la session
+     - Stocke tous les messages (utilisateur + assistant)
+     - Permet de conserver la conversation lors du rafraîchissement
+
+  5. AFFICHAGE DE L'HISTORIQUE
+     - Boucle sur tous les messages précédents
+     - Affiche chaque message dans une bulle de chat
+     - Distingue visuellement utilisateur et assistant
+
+  6. TRAITEMENT DES NOUVELLES QUESTIONS (st.chat_input)
+     - Attend une entrée utilisateur
+     - Quand l'utilisateur envoie une question :
+       a) Ajoute le message à l'historique
+       b) Affiche le message utilisateur
+       c) Lance l'agent avec Runner.run_sync(agent, user_input)
+       d) Affiche un spinner pendant le traitement ("Andrea réfléchit...")
+       e) Récupère la réponse (result.final_output)
+       f) Affiche la réponse
+       g) Ajoute la réponse à l'historique
+
+EXPÉRIENCE UTILISATEUR :
+  - Interface de chat moderne et intuitive
+  - Historique conservé pendant la session
+  - Feedback visuel (spinner) pendant le traitement
+  - Réponses contextuelles grâce au RAG
+
+LANCEMENT :
+  Commande : streamlit run app.py
+  L'application s'ouvre dans le navigateur (généralement http://localhost:8501)
+
+
+================================================================================
+7. FICHIER .env - VARIABLES D'ENVIRONNEMENT
+================================================================================
+
+Contient les clés API et secrets nécessaires au fonctionnement :
+
+  UPSTASH_VECTOR_REST_URL=https://...
+  UPSTASH_VECTOR_REST_TOKEN=...
+  OPENAI_API_KEY=...
+
+IMPORTANT :
+  - Ne JAMAIS committer ce fichier sur Git (ajouter dans .gitignore)
+  - Utiliser .env.example comme modèle (sans les vraies valeurs)
+  - Chaque développeur doit créer son propre .env
+
+
+================================================================================
+8. INSTALLATION ET UTILISATION
+================================================================================
+
+PRÉREQUIS :
+  - Python 3.12 ou 3.13
+  - Compte Upstash avec un index Vector configuré
+  - Clé API OpenAI
+
+INSTALLATION :
+  1. Cloner le projet
+  2. Créer un environnement virtuel : python -m venv .venv
+  3. Activer l'environnement :
+     - macOS/Linux : source .venv/bin/activate
+     - Windows : .venv\Scripts\activate
+  4. Installer les dépendances : pip install -r requirements.txt
+  5. Créer le fichier .env avec les clés API
+  6. Tester : pytest -s
+
+WORKFLOW :
+  1. Modifier les fichiers dans data/ (ajouter expériences, projets, etc.)
+  2. Indexer les données : python scripts/index_upstash.py
+  3. Lancer l'application : streamlit run app.py
+  4. Tester dans le navigateur
+
+MISE À JOUR DU CONTENU :
+  - Modifier data/*.md
+  - Relancer python scripts/index_upstash.py
+  - Redémarrer l'app si nécessaire
+
+
+================================================================================
+9. ARCHITECTURE TECHNIQUE - RÉSUMÉ
+================================================================================
+
+                          ┌─────────────────┐
+                          │   UTILISATEUR   │
+                          └────────┬────────┘
+                                   │ Question
+                                   ▼
+                          ┌─────────────────┐
+                          │    app.py       │
+                          │   (Streamlit)   │
+                          └────────┬────────┘
+                                   │
+                                   ▼
+                          ┌─────────────────┐
+                          │  agent_rag.py   │
+                          │  (Agent IA)     │
+                          └────────┬────────┘
+                                   │
+                          ┌────────┴────────┐
+                          │                 │
+                          ▼                 ▼
+                  ┌──────────────┐   ┌──────────────┐
+                  │ search_index │   │  GPT-4 nano  │
+                  │   (Tool)     │   │   (OpenAI)   │
+                  └──────┬───────┘   └──────────────┘
+                         │
+                         ▼
+                  ┌──────────────┐
+                  │   Upstash    │
+                  │   Vector DB  │
+                  └──────┬───────┘
+                         │
+                         ▼
+                  ┌──────────────┐
+                  │   data/*.md  │
+                  │  (indexé via │
+                  │ index_upstash)│
+                  └──────────────┘
+
+
+FLUX DE DONNÉES :
+  1. L'utilisateur pose une question dans app.py
+  2. app.py appelle l'agent défini dans agent_rag.py
+  3. L'agent utilise le tool search_index pour chercher dans Upstash
+  4. Upstash retourne les chunks pertinents (issus de data/)
+  5. L'agent envoie la question + contexte à GPT-4
+  6. GPT-4 génère une réponse naturelle
+  7. L'agent retourne la réponse à app.py
+  8. app.py affiche la réponse à l'utilisateur
+
+
+================================================================================
+10. AMÉLIORATIONS POSSIBLES
+================================================================================
+
+  - Ajouter plus de détails dans data/ (stages, projets complets)
+  - Améliorer le chunking (overlap, taille dynamique)
+  - Ajouter des filtres de recherche (par catégorie)
+  - Implémenter un historique conversationnel (mémoire de l'agent)
+  - Ajouter des graphiques et visualisations
+  - Déploiement en production (Streamlit Cloud, Heroku, etc.)
+  - Ajouter des tests plus complets
+  - Intégrer d'autres sources de données (LinkedIn, GitHub)
+
+
+================================================================================
+                            FIN DE LA DOCUMENTATION
+================================================================================
+
+Pour toute question : andreoli.andrea@example.com (à remplacer)
